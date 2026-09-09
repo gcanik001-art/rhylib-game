@@ -17,7 +17,8 @@ int gamepaused = 0;
 int gamescore = 0;
 float maxdistance = 0;
 // platfroms stucrure
-typedef struct platform {
+typedef struct platform
+{
     float x;
     float y;
     int length;
@@ -122,41 +123,49 @@ platform platforms[platforms_count] = {
     {46431, 550, 2, 4},
     {47144, 0, 3, 11},
     {47936, 0, 2, 11},
-    {48454, 0, 30, 4}
-};
+    {48454, 0, 30, 4}};
 // platfrom ar sate ball ar collision
-void checkcollision(Vector2 *ballposition, Vector2 previousposition, float *verticalvelocity, int *jumpcount) {
-    for (int i = 0; i < platforms_count; i++) {
-        if (platforms[i].length <= 0 || platforms[i].height <= 0) continue;
+void checkcollision(Vector2 *ballposition, Vector2 previousposition, float *verticalvelocity, int *jumpcount)
+{
+    for (int i = 0; i < platforms_count; i++)
+    {
+        if (platforms[i].length <= 0 || platforms[i].height <= 0)
+            continue;
         float left = platforms[i].x;
         float right = left + platforms[i].length * platformbrick_width;
         float top = platforms[i].y;
         float bottom = top + platforms[i].height * platformbrick_height;
-        if (ballposition->x + radius > left && ballposition->x - radius < right && ballposition->y + radius > top && ballposition->y - radius < bottom) {
+        if (ballposition->x + radius > left && ballposition->x - radius < right && ballposition->y + radius > top && ballposition->y - radius < bottom)
+        {
             float prevballleft = previousposition.x - radius;
             float prevballright = previousposition.x + radius;
             float prevballtop = previousposition.y - radius;
             float prevballbottom = previousposition.y + radius;
-            if (prevballbottom <= top) {
+            if (prevballbottom <= top)
+            {
                 ballposition->y = top - radius;
                 *verticalvelocity = 0.0f;
                 *jumpcount = 0;
             }
-            else if (prevballtop >= bottom) {
+            else if (prevballtop >= bottom)
+            {
                 ballposition->y = bottom + radius;
                 *verticalvelocity = fabsf(*verticalvelocity) * 0.5f + 100.0f;
             }
-            else if (prevballright <= left) {
+            else if (prevballright <= left)
+            {
                 ballposition->x = left - radius;
             }
-            else if (prevballleft >= right) {
+            else if (prevballleft >= right)
+            {
                 ballposition->x = right + radius;
             }
         }
     }
 }
 // spike stucture
-typedef struct {
+typedef struct
+{
     float x;
     float y;
     float width;
@@ -252,68 +261,91 @@ spike spikes[spike_count] = {
     {45000, 100, 45, 45, 0, 300, 200, -1, 1},
     {46200, 500, 45, 45, 150, 500, 160, 1, 2},
     {47000, 655, 45, 45, 100, 655, 180, -1, 0},
-    {48000, 100, 45, 45, 0, 300, 190, 1, 1}
-};
-Rectangle getspikerect(spike *s) {
+    {48000, 100, 45, 45, 0, 300, 190, 1, 1}};
+Rectangle getspikerect(spike *s)
+{
     return (Rectangle){s->x, s->y, s->width, s->height};
 }
 // spike kototok upore niche jabe and hosse je //platfrom ar sate collision hole jah jah hobe
-void updatespikes(float dt) {
-    for (int i = 0; i < spike_count; i++) {
+void updatespikes(float dt)
+{
+    for (int i = 0; i < spike_count; i++)
+    {
         // moving
         spikes[i].y += spikes[i].speed * spikes[i].direction * dt;
         // standard boundaries check (before platform check)
-        if (spikes[i].y >= spikes[i].maxy) {
+        if (spikes[i].y >= spikes[i].maxy)
+        {
             spikes[i].y = spikes[i].maxy;
             spikes[i].direction = -1;
         }
-        else if (spikes[i].y <= spikes[i].miny) {
+        else if (spikes[i].y <= spikes[i].miny)
+        {
             spikes[i].y = spikes[i].miny;
             spikes[i].direction = 1;
         }
         // platform collision check
         Rectangle srect = getspikerect(&spikes[i]);
-        for (int p = 0; p < platforms_count; p++) {
-            if (platforms[p].length <= 0 || platforms[p].height <= 0) continue;
+        for (int p = 0; p < platforms_count; p++)
+        {
+            if (platforms[p].length <= 0 || platforms[p].height <= 0)
+                continue;
             Rectangle prect = {
                 platforms[p].x, platforms[p].y, platforms[p].length * platformbrick_width, platforms[p].height * platformbrick_height};
-            if (CheckCollisionRecs(srect, prect)) {
+            if (CheckCollisionRecs(srect, prect))
+            {
                 // upward spike platfrom ar niche lage
-                if (spikes[i].direction == -1) {
-                    spikes[i].y = prect.y + prect.height + 1.0f; /* push completely outsside */ spikes[i].direction = 1; /* turn down */ }
+                if (spikes[i].direction == -1)
+                {
+                    spikes[i].y = prect.y + prect.height + 1.0f;
+                    spikes[i].direction = 1;
+                }
                 // downward spike platfrom ar upore lage
-                else if (spikes[i].direction == 1) {
-                    spikes[i].y = prect.y - spikes[i].height - 1.0f; /* push completely outside */ spikes[i].direction = -1; /* turn up */ }
+                else if (spikes[i].direction == 1)
+                {
+                    spikes[i].y = prect.y - spikes[i].height - 1.0f;
+                    spikes[i].direction = -1;
+                }
                 break;
             }
         }
     }
 }
-void checkspikecollision(Vector2 *ballposition, float *health, float *damagetimes) {
+void checkspikecollision(Vector2 *ballposition, float *health, float *damagetimes)
+{
     Rectangle ballrect = {ballposition->x - radius, ballposition->y - radius, radius * 2, radius * 2};
-    for (int i = 0; i < spike_count; i++) {
+    for (int i = 0; i < spike_count; i++)
+    {
         Rectangle spikerect = getspikerect(&spikes[i]);
-        if (CheckCollisionRecs(ballrect, spikerect)) {
-            if (*damagetimes <= 0) {
+        if (CheckCollisionRecs(ballrect, spikerect))
+        {
+            if (*damagetimes <= 0)
+            {
                 *health -= damage;
-                if (*health < 0) *health = 0;
+                if (*health < 0)
+                    *health = 0;
                 *damagetimes = 0.7f;
             }
         }
     }
 }
-void drawspikes(void) {
-    for (int i = 0; i < spike_count; i++) {
+void drawspikes(void)
+{
+    for (int i = 0; i < spike_count; i++)
+    {
         spike *s = &spikes[i];
-        if (s->type == 0 || s->type == 2) {
+        if (s->type == 0 || s->type == 2)
+        {
             DrawTriangle((Vector2){s->x, s->y + s->height}, (Vector2){s->x + s->width, s->y + s->height}, (Vector2){s->x + s->width / 2, s->y}, BLACK);
         }
-        else if (s->type == 1 || s->type == 3) {
+        else if (s->type == 1 || s->type == 3)
+        {
             DrawTriangle((Vector2){s->x, s->y}, (Vector2){s->x + s->width, s->y}, (Vector2){s->x + s->width / 2, s->y + s->height}, BLACK);
         }
     }
 }
-int main(void) {
+int main(void)
+{
     float height = 760;
     float width = 1600;
     float x = 250;
@@ -339,23 +371,28 @@ int main(void) {
     InitWindow(width, height, "bouncing classic game");
     SetWindowState(FLAG_VSYNC_HINT);
     SetTargetFPS(70);
-    while (!WindowShouldClose()) {
+    while (!WindowShouldClose())
+    {
         float dt = GetFrameTime();
         Vector2 previousballposition = ballposition;
         // spike update
         updatespikes(dt);
-        if (damagetimes > 0) {
+        if (damagetimes > 0)
+        {
             damagetimes -= dt;
         }
         // enter key
-        if (IsKeyPressed(KEY_ENTER)) {
+        if (IsKeyPressed(KEY_ENTER))
+        {
             // main menu game start
-            if (!gamestarted && !gameover) {
+            if (!gamestarted && !gameover)
+            {
                 gamestarted = 1;
                 gamepaused = 0;
             }
             // game over restart
-            else if (gameover) {
+            else if (gameover)
+            {
                 gameover = 0;
                 gamestarted = 1;
                 gamepaused = 0;
@@ -377,28 +414,35 @@ int main(void) {
             }
         }
         // pause
-        if (IsKeyPressed(KEY_P) && /* ai conditon mane game choltese */ gamestarted && !gameover) {
+        if (IsKeyPressed(KEY_P) && /* ai conditon mane game choltese */ gamestarted && !gameover)
+        {
             gamepaused = !gamepaused;
         }
         // player input
         direction.x = 0;
-        if (gamestarted && !gamepaused && !gameover) {
-            if (IsKeyDown(KEY_RIGHT)) {
+        if (gamestarted && !gamepaused && !gameover)
+        {
+            if (IsKeyDown(KEY_RIGHT))
+            {
                 direction.x = 1;
             }
-            if (IsKeyDown(KEY_LEFT)) {
+            if (IsKeyDown(KEY_LEFT))
+            {
                 direction.x = -1;
             }
             // jump
-            if (IsKeyPressed(KEY_SPACE) && jumpcount < jumpmax) {
+            if (IsKeyPressed(KEY_SPACE) && jumpcount < jumpmax)
+            {
                 vertialvelocity = jumppower;
                 jumpcount++;
             }
         }
         // game update
-        if (gamestarted && !gamepaused && !gameover) {
+        if (gamestarted && !gamepaused && !gameover)
+        {
             // score
-            if (ballposition.x > maxdistance) {
+            if (ballposition.x > maxdistance)
+            {
                 maxdistance = ballposition.x;
                 gamescore = (int)(maxdistance / 20.0f);
             }
@@ -409,7 +453,8 @@ int main(void) {
             ballposition.y += vertialvelocity * dt;
             // platform collision
             checkcollision(&ballposition, previousballposition, &vertialvelocity, &jumpcount);
-            if (ballposition.y + radius >= ground) {
+            if (ballposition.y + radius >= ground)
+            {
                 ballposition.y = ground - radius;
                 vertialvelocity = 0.0f;
                 jumpcount = 0;
@@ -421,7 +466,8 @@ int main(void) {
             // camera
             camera.target.x = ballposition.x;
             // game over
-            if (health <= 0) {
+            if (health <= 0)
+            {
                 health = 0;
                 gameover = 1;
                 gamestarted = 0;
@@ -439,22 +485,27 @@ int main(void) {
         BeginMode2D(camera_rounded);
         ClearBackground(RAYWHITE);
         // ground
-        for (int j = 0; j < 400; j++) {
+        for (int j = 0; j < 400; j++)
+        {
             float gx = brickx + brickwidth * j;
             float gy = bricky;
             DrawRectangle(gx, gy, brickwidth, brickheight, RED);
             DrawRectangleLines(gx, gy, brickwidth, brickheight, MAROON);
         }
         // ceiling
-        for (int j = 0; j < 400; j++) {
+        for (int j = 0; j < 400; j++)
+        {
             float cx = brickwidth * j;
             DrawRectangle(cx, 0, brickwidth, brickheight, RED);
             DrawRectangleLines(cx, 0, brickwidth, brickheight, MAROON);
         }
         // platforms
-        for (int p = 0; p < platforms_count; p++) {
-            for (int i = 0; i < platforms[p].height; i++) {
-                for (int j = 0; j < platforms[p].length; j++) {
+        for (int p = 0; p < platforms_count; p++)
+        {
+            for (int i = 0; i < platforms[p].height; i++)
+            {
+                for (int j = 0; j < platforms[p].length; j++)
+                {
                     float dx = platforms[p].x + j * platformbrick_width;
                     float dy = platforms[p].y + i * platformbrick_height;
                     DrawRectangle(dx, dy, platformbrick_width, platformbrick_height, RED);
@@ -468,7 +519,8 @@ int main(void) {
         DrawCircle(ballposition.x, ballposition.y, radius, RED);
         EndMode2D();
         // main menu
-        if (!gamestarted && !gameover && !gamepaused) /* intial point a */ {
+        if (!gamestarted && !gameover && !gamepaused) /* intial point a */
+        {
             DrawRectangle(0, 0, width, height, BLACK);
             DrawText("bouncing classic", width / 2 - 230, 180, 50, RED);
             DrawText("press enter to start", width / 2 - 150, 300, 25, BLACK);
@@ -477,14 +529,16 @@ int main(void) {
             DrawText("p = pause", width / 2 - 65, 430, 20, DARKGRAY);
         }
         // pause menu
-        if (gamepaused && !gameover) {
+        if (gamepaused && !gameover)
+        {
             DrawRectangle(0, 0, width, height, Fade(RAYWHITE, 0.90f));
             DrawText("game paused", width / 2 - 150, height / 2 - 100, 45, BLACK);
             DrawText("press p to resume", width / 2 - 120, height / 2 - 20, 25, DARKGRAY);
             DrawText("enter = continue", width / 2 - 115, height / 2 + 25, 20, DARKGRAY);
         }
         // game over screen
-        if (gameover) {
+        if (gameover)
+        {
             DrawRectangle(0, 0, width, height, Fade(RAYWHITE, 0.92f));
             DrawText("game over", width / 2 - 150, height / 2 - 120, 50, RED);
             DrawText(TextFormat("final score: %d", gamescore), width / 2 - 110, height / 2 - 40, 25, BLACK);
@@ -492,11 +546,13 @@ int main(void) {
             DrawText("press esc to exit", width / 2 - 100, height / 2 + 70, 20, DARKGRAY);
         }
         // score
-        if (gamestarted || gamepaused || gameover) {
+        if (gamestarted || gamepaused || gameover)
+        {
             DrawText(TextFormat("score: %d", gamescore), 20, 50, 30, BLACK);
         }
         // health bar
-        if (gamestarted || gamepaused || gameover) {
+        if (gamestarted || gamepaused || gameover)
+        {
             // background
             DrawRectangle(20, 20, 300, 30, DARKGRAY);
             // health
