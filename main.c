@@ -21,6 +21,9 @@
 // spike hitbox thoda choto rakha hocche (visual triangle theke), tai edge/corner e halka touch e "random"
 // mone hoya damage r hobe na - shudhu real vabe spike er gaye lagle e hp kata jabe
 #define spike_hit_radius (radius * 0.72f)
+#define sentry_hit_radius 17.0f
+#define sentry_damage 15.0f
+#define sentry_max_speed 1500.0f
 // wall e lagle chotto push-back dibo, jate ball wall e atke na thake r
 #define wall_knockback 5.0f
 // win trigger x position
@@ -36,6 +39,39 @@ int gameover = 0;
 int gamestarted = 0;
 int gamepaused = 0;
 int gamewon = 0;
+
+// Stone-age science art direction. Generated textures live in assets/stone-age-science/.
+static const Color ARENA_PINK = {35, 181, 190, 255};       // cyan science accent
+static const Color ARENA_PINK_DARK = {16, 79, 82, 255};    // deep oxidized copper
+static const Color ARENA_MINT = {164, 201, 119, 255};       // moss green
+static const Color ARENA_INK = {16, 28, 27, 255};           // charcoal ink
+static const Color ARENA_CREAM = {239, 226, 184, 255};      // aged paper
+static const Color SCIENCE_COPPER = {190, 112, 54, 255};
+static Texture2D menuBackground;
+static Texture2D gameplayBackground;
+static Texture2D playerToken;
+static Texture2D platformBlockTexture;
+static Texture2D platformTileTexture;
+static Texture2D scienceTokenTexture;
+static Texture2D scienceCrystalTexture;
+static Texture2D powerTextures[3];
+static Texture2D checkpointTexture;
+static Texture2D bombTexture;
+static Texture2D bombLauncherTexture;
+static Texture2D groundEnemyTexture;
+static Texture2D flyingEnemyTexture;
+static Texture2D hazardTextures[3];
+
+enum
+{
+    MENU_HOME = 0,
+    MENU_HOW_TO_PLAY = 1,
+    MENU_CREDITS = 2
+};
+static int menuPage = MENU_HOME;
+static float hazardThemeTimer = 0.0f;
+static int hazardTheme = 0;
+#define hazard_theme_duration 12.0f
 
 // game score
 int gamescore = 0;
@@ -172,6 +208,103 @@ void DrawTextCentered(const char *text, int y, int size, Color c)
 {
     int w = MeasureText(text, size);
     DrawText(text, (GetScreenWidth() - w) / 2, y, size, c);
+}
+
+static void DrawTextInRectCentered(const char *text, Rectangle rect, int size, Color color)
+{
+    int textWidth = MeasureText(text, size);
+    DrawText(text, (int)(rect.x + (rect.width - textWidth) * 0.5f),
+             (int)(rect.y + (rect.height - size) * 0.5f), size, color);
+}
+
+static void DrawTextureCover(Texture2D texture, Rectangle destination, Color tint)
+{
+    if (texture.id == 0)
+        return;
+
+    float destinationRatio = destination.width / destination.height;
+    float textureRatio = (float)texture.width / (float)texture.height;
+    Rectangle source = {0, 0, (float)texture.width, (float)texture.height};
+
+    if (textureRatio > destinationRatio)
+    {
+        source.width = texture.height * destinationRatio;
+        source.x = (texture.width - source.width) * 0.5f;
+    }
+    else
+    {
+        source.height = texture.width / destinationRatio;
+        source.y = (texture.height - source.height) * 0.5f;
+    }
+
+    DrawTexturePro(texture, source, destination, (Vector2){0, 0}, 0.0f, tint);
+}
+
+static void DrawSpriteCentered(Texture2D texture, float x, float y, float width, float height,
+                               float rotation, int flipX, Color tint)
+{
+    if (texture.id == 0)
+        return;
+    Rectangle source = {0, 0, (float)texture.width, (float)texture.height};
+    if (flipX)
+    {
+        source.x = (float)texture.width;
+        source.width = -(float)texture.width;
+    }
+    DrawTexturePro(texture, source, (Rectangle){x, y, width, height},
+                   (Vector2){width * 0.5f, height * 0.5f}, rotation, tint);
+}
+
+static void DrawGlassPanel(Rectangle rect, Color accent)
+{
+    DrawRectangleRounded(rect, 0.035f, 8, Fade(ARENA_INK, 0.88f));
+    DrawRectangleRoundedLinesEx(rect, 0.035f, 8, 2.0f, Fade(accent, 0.85f));
+    DrawRectangle((int)rect.x, (int)rect.y, 6, (int)rect.height, accent);
+}
+
+static Rectangle GetMenuPlayButton(int width, int height)
+{
+    (void)width;
+    (void)height;
+    return (Rectangle){96, 390, 500, 58};
+}
+
+static Rectangle GetMenuHowButton(void)
+{
+    return (Rectangle){96, 462, 240, 54};
+}
+
+static Rectangle GetMenuCreditsButton(void)
+{
+    return (Rectangle){356, 462, 240, 54};
+}
+
+static Rectangle GetMenuBackButton(void)
+{
+    return (Rectangle){675, 610, 250, 54};
+}
+
+static int PointInside(Vector2 point, Rectangle rect)
+{
+    return point.x >= rect.x && point.x <= rect.x + rect.width &&
+           point.y >= rect.y && point.y <= rect.y + rect.height;
+}
+
+static void DrawArenaBlock(float x, float y, float w, float h)
+{
+    Texture2D texture = (w / h > 1.25f) ? platformBlockTexture : platformTileTexture;
+    if (texture.id != 0)
+    {
+        float drawW = w * 1.06f;
+        float drawH = h * ((w / h > 1.25f) ? 1.35f : 1.08f);
+        DrawSpriteCentered(texture, x + w * 0.5f, y + h * 0.5f, drawW, drawH, 0.0f, 0, WHITE);
+        return;
+    }
+    Color top = (Color){42, 94, 98, 255};
+    Color bottom = (Color){13, 39, 45, 255};
+    DrawRectangleGradientV((int)x, (int)y, (int)w, (int)h, top, bottom);
+    DrawRectangleLinesEx((Rectangle){x, y, w, h}, 2.0f, Fade(ARENA_MINT, 0.82f));
+    DrawLineEx((Vector2){x + 5, y + 7}, (Vector2){x + w - 5, y + 7}, 2.0f, Fade(ARENA_CREAM, 0.34f));
 }
 // <<<<<<< player name + leaderboard <<<<<<<
 
@@ -586,10 +719,18 @@ void drawcoins(void)
     {
         if (coins[i].active)
         {
-
-            DrawCircle((int)coins[i].x, (int)coins[i].y, coins[i].coinradius, GOLD);
-            DrawCircleLines((int)coins[i].x, (int)coins[i].y, coins[i].coinradius, ORANGE);
-            DrawCircle((int)coins[i].x, (int)coins[i].y, coins[i].coinradius * 0.4f, YELLOW);
+            float pulse = 1.0f + sinf((float)GetTime() * 4.0f + i * 0.35f) * 0.08f;
+            float size = coins[i].coinradius * 2.75f * pulse;
+            if (scienceTokenTexture.id != 0)
+            {
+                DrawSpriteCentered(scienceTokenTexture, coins[i].x, coins[i].y,
+                                   size, size, (float)GetTime() * 18.0f, 0, WHITE);
+            }
+            else
+            {
+                DrawCircle((int)coins[i].x, (int)coins[i].y, coins[i].coinradius, GOLD);
+                DrawCircleLines((int)coins[i].x, (int)coins[i].y, coins[i].coinradius, ORANGE);
+            }
         }
     }
 }
@@ -696,6 +837,14 @@ void drawdiamonds(void)
             float x = diamonds[i].x;
             float y = diamonds[i].y;
             float s = diamonds[i].size;
+
+            if (scienceCrystalTexture.id != 0)
+            {
+                float bob = sinf((float)GetTime() * 2.5f + i) * 4.0f;
+                DrawSpriteCentered(scienceCrystalTexture, x, y + bob, s * 2.65f, s * 2.85f,
+                                   0.0f, 0, WHITE);
+                continue;
+            }
 
             Vector2 pTopL = {x - s * 0.5f, y - s * 0.6f};
             Vector2 pTopR = {x + s * 0.5f, y - s * 0.6f};
@@ -824,6 +973,16 @@ void drawpowerups(void)
         float bob = sinf(GetTime() * 3.0f + i) * 4.0f; // halka bhasha (floating) effect
         y += bob;
 
+        int powerType = powerups[i].type;
+        if (powerType >= 0 && powerType < 3 && powerTextures[powerType].id != 0)
+        {
+            float size = r * 3.2f;
+            DrawCircle((int)x, (int)y, r * 1.22f,
+                       Fade(powerType == POWER_SPEED ? LIME : SKYBLUE, 0.13f));
+            DrawSpriteCentered(powerTextures[powerType], x, y, size, size, 0.0f, 0, WHITE);
+            continue;
+        }
+
         if (powerups[i].type == POWER_SHIELD)
         {
             DrawCircle((int)x, (int)y, r, (Color){80, 180, 255, 255});
@@ -876,17 +1035,17 @@ void checkpowerupcollision(Vector2 ballposition)
             if (powerups[i].type == POWER_SHIELD)
             {
                 shieldTimer = shield_duration;
-                PushNotification("SHIELD ACTIVATED!");
+                PushNotification("STONE SHIELD READY!");
             }
             else if (powerups[i].type == POWER_MAGNET)
             {
                 magnetTimer = magnet_duration;
-                PushNotification("MAGNET ACTIVATED!");
+                PushNotification("LODESTONE ACTIVE!");
             }
             else
             {
                 speedTimer = speed_duration;
-                PushNotification("SPEED BOOST!");
+                PushNotification("STEAM BOOST READY!");
             }
         }
     }
@@ -988,28 +1147,19 @@ void Back_Ground_Color(float distance, Color *skytop, Color *skybottom)
 // >>>>>>> NOTUN FEATURE: parallax background - dure pahar + megh, alada gotite move kore (depth) >>>>>>>
 void DrawParallaxBackground(float camX, float width, float height)
 {
-    // durer pahar (far mountains) - khub dhire move kore
-    float parallax1 = 0.12f;
-    Color mountainColor = Fade(DARKGRAY, 0.30f);
-    float offset1 = fmodf(camX * parallax1, 420.0f);
-    for (int i = -1; i < (int)(width / 420.0f) + 3; i++)
+    // Floating pollen and drifting firefly motes reinforce the reclaimed-wilderness mood.
+    float offset = fmodf(camX * 0.08f, 260.0f);
+    for (int i = -1; i < (int)(width / 260.0f) + 3; i++)
     {
-        float baseX = i * 420 - offset1;
-        float baseY = 640;
-        DrawTriangle((Vector2){baseX, baseY}, (Vector2){baseX + 210, baseY - 190}, (Vector2){baseX + 420, baseY}, mountainColor);
+        float x = i * 260.0f - offset;
+        float y = 92.0f + 18.0f * sinf((float)i * 1.7f);
+        DrawCircle((int)x, (int)y, 4.0f, Fade(ARENA_MINT, 0.48f));
+        DrawCircle((int)x, (int)y, 15.0f, Fade(ARENA_MINT, 0.08f));
+        DrawLineEx((Vector2){x - 7, y + 11}, (Vector2){x + 3, y + 6}, 2.0f,
+                   Fade(ARENA_CREAM, 0.22f));
     }
-    // megh (clouds) - moddhom gotite move kore
-    float parallax2 = 0.28f;
-    float offset2 = fmodf(camX * parallax2, 320.0f);
-    for (int i = -1; i < (int)(width / 320.0f) + 3; i++)
-    {
-        float baseX = i * 320 - offset2;
-        float baseY = 120 + 35 * sinf((float)i * 1.7f);
-        Color cc = Fade(WHITE, 0.75f);
-        DrawEllipse((int)baseX, (int)baseY, 45, 22, cc);
-        DrawEllipse((int)(baseX + 30), (int)(baseY - 10), 34, 18, cc);
-        DrawEllipse((int)(baseX - 26), (int)(baseY - 6), 30, 16, cc);
-    }
+    DrawRectangleGradientV(0, (int)(height * 0.52f), (int)width, (int)(height * 0.48f),
+                           Fade(ARENA_MINT, 0.0f), Fade(ARENA_INK, 0.20f));
 }
 // <<<<<<<
 
@@ -1092,76 +1242,76 @@ spike spikes[] = {
     {4400, 655, 45, 45, 150, 655, 170, 1, 0},
     // {4550, 450, 45, 45, 100, 450, 150, 1, 3},
     {4800, 655, 45, 45, 100, 655, 7000, -1, 0},
-    {5250, 655, 45, 45, 120, 655, 160, 1, 0},
+    {5250, 655, 45, 45, 120, 655, 600, 1, 0},
     {5950, 255, 45, 45, 50, 255, 900, -1, 2},
     // {6000, 450, 45, 45, 100, 450, 160, -1, 3},
-    {6100, 655, 45, 45, 100, 655, 1000, -1, 0},
+    {6100, 655, 50, 45, 100, 655, 1000, -1, 0},
     {6400, 455, 45, 45, 150, 455, 150, 1, 2},
     {6700, 255, 45, 45, 50, 255, 400, -1, 2},
-    {8050, 100, 45, 45, 0, 300, 160, 1, 1},
+    {8050, 100, 45, 45, 80, 300, 560, 1, 1},
     {8300, 305, 45, 45, 50, 305, 680, 1, 2},
     //{9000, 100, 45, 45, 0, 300, 170, -1, 1},
-    {9300, 100, 45, 45, 0, 300, 160, 1, 1},
-    {10200, 100, 45, 45, 0, 300, 600, -1, 1},
+   // {9300, 100, 45, 45, 0, 300, 160, 1, 1},
+    {10200, 100, 45, 45, 80, 300, 600, -1, 1},
     {10800, 655, 45, 45, 150, 655, 700, 1, 0},
-    {11200, 655, 45, 45, 120, 655, 160, -1, 0},
-    {11900, 100, 45, 45, 0, 300, 160, 1, 1},
+    {11200, 655, 45, 45, 120, 655, 400, -1, 0},
+    {11900, 100, 45, 45, 80, 300, 700, 1, 1},
     {12300, 500, 45, 45, 100, 500, 900, 1, 2},
-    {12900, 100, 45, 45, 0, 300, 170, -1, 1},
-    {13400, 100, 45, 45, 0, 300, 1000, 1, 1},
+    {12900, 100, 45, 45, 80, 300, 500, -1, 1},
+    {13400, 100, 45, 45, 80, 300, 1000, 1, 1},
     {13900, 500, 45, 45, 70, 660, 1000, -1, 2},
     {14200, 655, 45, 45, 150, 655, 1000, 1, 0},
     {14800, 655, 45, 45, 100, 655, 1200, -1, 0},
-    {15300, 100, 45, 45, 0, 300, 160, 1, 1},
+    {15300, 100, 45, 45, 80, 300, 500, 1, 1},
     {15800, 655, 45, 45, 120, 655, 1500, -1, 0},
     {16800, 655, 45, 45, 150, 655, 180, -1, 0},
-    {17300, 100, 45, 45, 0, 300, 160, 1, 1},
+    {17300, 100, 45, 45, 80, 300, 160, 1, 1},
     {17800, 655, 45, 45, 100, 655, 1070, -1, 0},
-    {18300, 100, 45, 45, 0, 300, 180, 1, 1},
+    {18300, 100, 45, 45, 80, 300, 580, 1, 1},
     {18800, 655, 45, 45, 150, 655, 500, -1, 0},
-    {19300, 100, 45, 45, 0, 300, 160, 1, 1},
+    {19300, 100, 45, 45, 80, 300, 1160, 1, 1},
     {19800, 655, 45, 45, 100, 655, 1200, -1, 0},
-    {20300, 100, 45, 45, 0, 300, 1000, 1, 1},
+    {20300, 100, 45, 45, 80, 300, 1000, 1, 1},
     {20800, 500, 45, 45, 150, 500, 1110, -1, 2},
     {21200, 655, 45, 45, 100, 655, 1000, 1, 0},
     {21800, 500, 45, 45, 150, 500, 1000, -1, 2},
     {22600, 655, 45, 45, 100, 655, 190, 1, 0},
-    {23000, 100, 45, 45, 0, 300, 180, -1, 1},
+    {23000, 100, 45, 45, 80, 300, 180, -1, 1},
     {23600, 500, 45, 45, 150, 500, 160, 1, 2},
     {24300, 655, 45, 45, 100, 655, 200, -1, 0},
-    {25000, 500, 45, 45, 150, 500, 170, 1, 2},
+    {25000, 500, 45, 45, 150, 500, 1070, 1, 2},
     {25800, 655, 45, 45, 100, 655, 400, -1, 0},
-    {26500, 100, 45, 45, 0, 300, 190, 1, 1},
+    {26500, 100, 45, 45, 80, 300, 190, 1, 1},
     {27400, 500, 45, 45, 150, 500, 160, -1, 2},
     {28170, 655, 45, 45, 100, 655, 300, 1, 0},
-    {28700, 100, 45, 45, 0, 300, 170, -1, 1},
+    {28700, 100, 45, 45,80, 300, 1000, -1, 1},
     {29200, 500, 45, 45, 150, 500, 200, 1, 2},
-    {30900, 100, 45, 45, 0, 300, 190, 1, 1},
-    {31400, 500, 45, 45, 150, 500, 160, -1, 2},
-    {32000, 655, 45, 45, 100, 655, 200, 1, 0},
-    {32500, 100, 45, 45, 0, 300, 180, -1, 1},
+    {30900, 100, 45, 45, 80, 300, 600, 1, 1},
+    {31400, 500, 45, 45, 150, 500, 700, -1, 2},
+    {32000, 655, 45, 45, 100, 655, 1000, 1, 0},
+    {32500, 100, 45, 45, 80, 300, 180, -1, 1},
     {33100, 500, 45, 45, 150, 660, 200, 1, 2},
-    {33600, 655, 45, 45, 100, 655, 160, -1, 0},
-    {34200, 100, 45, 45, 0, 300, 500, 1, 1},
+    {33600, 655, 45, 45, 100, 655, 1160, -1, 0},
+    {34200, 100, 45, 45, 80, 300, 500, 1, 1},
     {34800, 500, 45, 45, 150, 500, 170, -1, 2},
-    {35500, 655, 45, 45, 100, 655, 180, 1, 0},
-    {36200, 100, 45, 45, 0, 300, 200, -1, 1},
-    {37000, 500, 45, 45, 150, 500, 160, 1, 2},
+    {35500, 655, 45, 45, 100, 655, 580, 1, 0},
+    {36200, 100, 45, 45, 80, 300, 1000, -1, 1},
+    {37000, 500, 45, 45, 150, 500, 1160, 1, 2},
     {37500, 655, 45, 45, 100, 655, 1000, -1, 0},
-    {38200, 100, 45, 45, 0, 300, 190, 1, 1},
+    {38200, 100, 45, 45, 80, 300, 190, 1, 1},
     {38800, 500, 45, 45, 150, 500, 170, -1, 2},
-    {40100, 100, 45, 45, 0, 300, 200, -1, 1},
+    {40100, 100, 45, 45, 80, 300, 200, -1, 1},
     {40800, 500, 45, 45, 150, 500, 1500, 1, 2},
     {41400, 655, 45, 45, 100, 655, 1000, -1, 0},
-    {42200, 100, 45, 45, 0, 300, 190, 1, 1},
+    {42200, 100, 45, 45, 80, 300, 190, 1, 1},
     {43000, 500, 45, 45, 150, 500, 1600, -1, 2},
     {44000, 655, 45, 45, 100, 655, 180, 1, 0},
     // ===== NOTUN: shesh er dike extra enemy (speed dhire dhire barano, 200 -> 220) =====
     {44650, 100, 45, 45, 0, 300, 200, 1, 1},
     {45250, 655, 45, 45, 100, 655, 210, -1, 0},
-    {45450, 500, 45, 45, 150, 500, 200, 1, 2},
+    {45450, 500, 45, 45, 150, 500, 1000, 1, 2},
     {45800, 500, 45, 45, 300, 500, 200, -1, 2},
-    {46200, 500, 45, 45, 150, 660, 160, 1, 2},
+    {46200, 500, 45, 45, 150, 660, 1060, 1, 2},
     {46350, 100, 45, 45, 0, 300, 210, -1, 1},
     {46650, 655, 45, 45, 100, 655, 220, 1, 0},
     {46900, 100, 45, 45, 0, 300, 220, -1, 1},
@@ -1243,8 +1393,9 @@ void updatespikes(float dt)
 {
     for (int i = 0; i < spike_count; i++)
     {
-        // moving
-        spikes[i].y += spikes[i].speed * spikes[i].direction * dt;
+        // Sentry movement is deliberately capped so every pass can be read and dodged.
+        float movementSpeed = fminf(spikes[i].speed, sentry_max_speed);
+        spikes[i].y += movementSpeed * spikes[i].direction * dt;
         // standard boundaries check (before platform check)
         if (spikes[i].y >= spikes[i].maxy)
         {
@@ -1290,15 +1441,22 @@ void checkspikecollision(Vector2 *ballposition, float *health, float *damagetime
 {
     for (int i = 0; i < spike_count; i++)
     {
-        // fast broad-phase check (bounding box) - shudhu perf er jonno, real hit exact triangle diye
+        // Fast broad-phase check before the fair circular sentry hitbox.
         Rectangle broad = getspikerect(&spikes[i]);
         if (!(ballposition->x + radius > broad.x && ballposition->x - radius < broad.x + broad.width &&
               ballposition->y + radius > broad.y && ballposition->y - radius < broad.y + broad.height))
             continue;
-        Vector2 p1, p2, p3;
-        getspiketriangle(&spikes[i], &p1, &p2, &p3);
-        // narrow-phase e thoda choto (forgiving) hitbox diye check
-        if (checkcirclecollidestriangle(*ballposition, spike_hit_radius, p1, p2, p3))
+        Vector2 center = {spikes[i].x + spikes[i].width * 0.5f,
+                          spikes[i].y + spikes[i].height * 0.5f};
+        int hit = CheckCollisionCircles(*ballposition, spike_hit_radius, center, sentry_hit_radius);
+        Texture2D activeHazard = hazardTextures[hazardTheme];
+        if (activeHazard.id == 0)
+        {
+            Vector2 p1, p2, p3;
+            getspiketriangle(&spikes[i], &p1, &p2, &p3);
+            hit = checkcirclecollidestriangle(*ballposition, spike_hit_radius, p1, p2, p3);
+        }
+        if (hit)
         {
             if (*damagetimes <= 0)
             {
@@ -1310,13 +1468,13 @@ void checkspikecollision(Vector2 *ballposition, float *health, float *damagetime
                 }
                 else
                 {
-                    *health -= damage;
+                    *health -= sentry_damage;
                     if (*health < 0)
                         *health = 0;
                     *damagetimes = 0.7f;
                     PlaySound(spikeSound); // spike e lagle sound
                     TriggerShake(0.25f, 6.0f);
-                    SpawnBurst(*ballposition, 14, RED, 160.0f, 0.4f, 4.0f);
+                    SpawnBurst(*ballposition, 14, ORANGE, 160.0f, 0.4f, 4.0f);
                 }
             }
             break;
@@ -1329,9 +1487,27 @@ void drawspikes(void)
     for (int i = 0; i < spike_count; i++)
     {
         spike *s = &spikes[i];
+        Texture2D activeHazard = hazardTextures[hazardTheme];
+        if (activeHazard.id != 0)
+        {
+            float cx = s->x + s->width * 0.5f;
+            float cy = s->y + s->height * 0.5f;
+            float pulse = 1.0f + 0.05f * sinf((float)GetTime() * 5.0f + i * 0.45f);
+            float h = 62.0f * pulse;
+            float w = h * ((float)activeHazard.width / (float)activeHazard.height);
+            float rotation = (s->type == 1 || s->type == 3) ? 180.0f : 0.0f;
+            DrawCircle((int)cx, (int)cy, 24.0f, Fade(ORANGE, 0.10f));
+            DrawSpriteCentered(activeHazard, cx, cy, w, h, rotation, 0, WHITE);
+            continue;
+        }
         Vector2 p1, p2, p3;
         getspiketriangle(s, &p1, &p2, &p3);
-        DrawTriangle(p1, p2, p3, BLACK);
+        DrawTriangle(p1, p2, p3, ARENA_PINK);
+        DrawLineEx(p1, p2, 2.0f, ARENA_INK);
+        DrawLineEx(p2, p3, 2.0f, ARENA_INK);
+        DrawLineEx(p3, p1, 2.0f, ARENA_INK);
+        Vector2 center = {(p1.x + p2.x + p3.x) / 3.0f, (p1.y + p2.y + p3.y) / 3.0f};
+        DrawCircleV(center, 3.0f, ARENA_CREAM);
     }
 }
 
@@ -1355,15 +1531,18 @@ typedef struct
 
 // {x, y, r, minx, maxx, speed, direction, basey, amp, phase, kind}
 enemy enemies[] = {
-    // ---- ground walker (y = 700 - r = 675) ----
-    {43700, 675, 25, 43700, 43950, 110, 1, 675, 0, 0, 0},
-    {44500, 675, 25, 44120, 44880, 120, -1, 675, 0, 0, 0},
+    // ---- early-game enemies: late-game er kichu enemy age niye asha ----
+    // ground walker
+    {3200, 675, 25, 3000, 3450, 110, 1, 675, 0, 0, 0},
+    {7200, 675, 25, 7000, 7300, 120, -1, 675, 0, 0, 0},
+    // flyer
+   // {9000, 450, 22, 8700, 9050, 140, 1, 450, 65, 0.0f, 1},
+    {11000, 420, 22, 10750, 11250, 150, -1, 420, 60, 1.5f, 1},
+
+    // ---- late-game enemies: original hard section ----
     {45400, 675, 25, 45150, 45650, 130, 1, 675, 0, 0, 0},
     {46000, 675, 25, 45700, 46400, 140, -1, 675, 0, 0, 0},
     {46800, 675, 25, 46560, 47050, 150, 1, 675, 0, 0, 0},
-    // ---- flyer ----
-    {43900, 420, 22, 43700, 44250, 140, 1, 420, 70, 0.0f, 1},
-    {44700, 380, 22, 44500, 44900, 150, -1, 380, 60, 1.5f, 1},
     {45400, 450, 22, 45150, 45650, 160, 1, 450, 70, 3.0f, 1},
     {46200, 480, 22, 45950, 46400, 160, -1, 480, 50, 4.5f, 1},
     {46800, 420, 22, 46550, 47050, 170, 1, 420, 80, 2.0f, 1}};
@@ -1432,6 +1611,15 @@ void drawenemies(void)
     for (int i = 0; i < enemy_count; i++)
     {
         enemy *e = &enemies[i];
+        Texture2D enemyTexture = (e->kind == 0) ? groundEnemyTexture : flyingEnemyTexture;
+        if (enemyTexture.id != 0)
+        {
+            float w = e->r * (e->kind == 0 ? 4.35f : 4.8f);
+            float h = w * ((float)enemyTexture.height / (float)enemyTexture.width);
+            DrawSpriteCentered(enemyTexture, e->x, e->y, w, h, 0.0f,
+                               e->direction < 0, WHITE);
+            continue;
+        }
         Color body = (e->kind == 0) ? PURPLE : ORANGE;
         Vector2 c = {e->x, e->y};
         DrawCircleV(c, e->r, body);
@@ -1471,7 +1659,7 @@ void checkcheckpoints(Vector2 ballposition, float *health)
             checkpoints[i].reached = 1;
             lastCheckpointX = checkpoints[i].x;
             *health = fminf(maxhealth, *health + 15.0f);
-            PushNotification("CHECKPOINT REACHED!");
+            PushNotification("SCIENCE BEACON RESTORED!");
             SpawnBurst(ballposition, 24, SKYBLUE, 200.0f, 0.7f, 5.0f);
             // NOTUN: checkpoint e pouche o coin er moto sound (anikcoin2.wav) bajbe
             PlaySound(coinSound);
@@ -1483,12 +1671,24 @@ void drawcheckpoints(void)
 {
     for (int i = 0; i < checkpoint_count; i++)
     {
-        Color poleColor = checkpoints[i].reached ? GREEN : GRAY;
-        DrawRectangle((int)checkpoints[i].x - 4, 100, 8, 600, poleColor);
+        if (checkpointTexture.id != 0)
+        {
+            Color tint = checkpoints[i].reached ? WHITE : (Color){150, 160, 150, 220};
+            DrawSpriteCentered(checkpointTexture, checkpoints[i].x, 400.0f,
+                               300.0f, 600.0f, 0.0f, 0, tint);
+            if (checkpoints[i].reached)
+                DrawCircle((int)checkpoints[i].x, 111, 24, Fade(SKYBLUE, 0.18f));
+            continue;
+        }
+        Color poleColor = checkpoints[i].reached ? ARENA_MINT : ARENA_INK;
+        Color flagColor = checkpoints[i].reached ? (Color){83, 232, 175, 255} : ARENA_PINK;
+        DrawRectangle((int)checkpoints[i].x - 5, 100, 10, 600, poleColor);
+        DrawRectangle((int)checkpoints[i].x - 2, 100, 3, 600, Fade(ARENA_CREAM, 0.65f));
         Vector2 f1 = {checkpoints[i].x + 4, 110};
         Vector2 f2 = {checkpoints[i].x + 4, 150};
         Vector2 f3 = {checkpoints[i].x + 50, 130};
-        DrawTriangle(f1, f2, f3, checkpoints[i].reached ? LIME : LIGHTGRAY);
+        DrawTriangle(f1, f2, f3, flagColor);
+        DrawCircle((int)checkpoints[i].x, 100, 9, ARENA_CREAM);
     }
 }
 
@@ -1503,35 +1703,39 @@ void resetcheckpoints(void)
 // game over / win screen ek jaygay
 void DrawEndScreen(const char *title, Color titlecolor, int width, int height)
 {
-    DrawRectangle(0, 0, width, height, Fade(RAYWHITE, 0.92f));
-    DrawTextCentered(title, height / 2 - 210, 50, titlecolor);
-    DrawTextCentered(TextFormat("player: %s", playername), height / 2 - 145, 26, DARKGRAY);
-    DrawTextCentered(TextFormat("final score: %d", gamescore), height / 2 - 105, 30, BLACK);
+    DrawRectangle(0, 0, width, height, Fade(ARENA_INK, 0.88f));
+    DrawCircleLines(width / 2 - 66, 76, 24, SCIENCE_COPPER);
+    DrawCircle(width / 2 - 66, 76, 6, titlecolor);
+    DrawLineEx((Vector2){width / 2 - 66, 49}, (Vector2){width / 2 - 66, 103}, 3.0f, SCIENCE_COPPER);
+    DrawLineEx((Vector2){width / 2 - 93, 76}, (Vector2){width / 2 - 39, 76}, 3.0f, SCIENCE_COPPER);
+    DrawCircle(width / 2 + 10, 76, 10, titlecolor);
+    DrawCircleLines(width / 2 + 58, 76, 18, SCIENCE_COPPER);
+    DrawTextCentered(title, height / 2 - 235, 52, ARENA_CREAM);
+    DrawTextCentered(TextFormat("EXPLORER  %s", playername), height / 2 - 170, 24, Fade(ARENA_CREAM, 0.78f));
+    DrawTextCentered(TextFormat("FINAL SCORE  %d", gamescore), height / 2 - 132, 30, WHITE);
     if (newrecord)
     {
-        DrawTextCentered("NEW HIGH SCORE!", height / 2 - 65, 30, ORANGE);
+        DrawTextCentered("NEW DISCOVERY RECORD", height / 2 - 91, 27, GOLD);
     }
 
     // leaderboard box
     int boxw = 320;
     int boxx = (width - boxw) / 2;
     int boxy = height / 2 - 25;
-    DrawRectangle(boxx, boxy, boxw, 130, Fade(BLACK, 0.06f));
-    DrawRectangleLines(boxx, boxy, boxw, 130, DARKGRAY);
-    DrawTextCentered("TOP 5", boxy + 6, 20, MAROON);
+    DrawGlassPanel((Rectangle){boxx, boxy, boxw, 130}, titlecolor);
+    DrawTextCentered("HALL OF INVENTORS", boxy + 7, 20, ARENA_CREAM);
     for (int i = 0; i < leaderboard_size; i++)
     {
-        Color rowc = (i == 0) ? GOLD : DARKGRAY;
+        Color rowc = (i == 0) ? GOLD : Fade(ARENA_CREAM, 0.82f);
         DrawText(TextFormat("%d. %-10s %6d", i + 1, leaderboard[i].name, leaderboard[i].score), boxx + 15, boxy + 30 + i * 20, 18, rowc);
     }
 
-    DrawTextCentered("press enter to restart", boxy + 150, 22, DARKGRAY);
+    DrawTextCentered("ENTER  RESTART EXPERIMENT", boxy + 152, 22, ARENA_CREAM);
     if (!gamewon && lastCheckpointX > 250.0f)
     {
-        DrawTextCentered(TextFormat("press c to continue from checkpoint (x:%.0f)", lastCheckpointX), boxy + 178, 20, DARKGREEN);
+        DrawTextCentered(TextFormat("C  RESTORE AT BEACON %.0f", lastCheckpointX), boxy + 181, 20, ARENA_MINT);
     }
-    DrawTextCentered("press m for main menu", boxy + 206, 22, DARKGRAY);
-    DrawTextCentered("press esc to exit", boxy + 232, 20, DARKGRAY);
+    DrawTextCentered("M  MAIN MENU     ESC  EXIT", boxy + 213, 20, Fade(ARENA_CREAM, 0.70f));
 }
 
 // BOM ADDING
@@ -1706,6 +1910,14 @@ void drawbombs(void)
         if (!bombzones[z].active)
             continue;
         float dx = bombzones[z].dropx;
+        if (bombLauncherTexture.id != 0)
+        {
+            float h = 92.0f;
+            float w = h * ((float)bombLauncherTexture.width / (float)bombLauncherTexture.height);
+            DrawLineEx((Vector2){dx, 100}, (Vector2){dx, 155}, 3.0f, Fade(BROWN, 0.70f));
+            DrawSpriteCentered(bombLauncherTexture, dx, 135, w, h, 0.0f, 0, WHITE);
+            continue;
+        }
         DrawCircle((int)dx, 125, 22, MAROON);
         DrawCircleLines((int)dx, 125, 22, BLACK);
         DrawCircle((int)dx - 8, 120, 6, WHITE);
@@ -1721,6 +1933,12 @@ void drawbombs(void)
         bomb *b = &bombs[i];
         if (b->state == 1)
         {
+            if (bombTexture.id != 0)
+            {
+                DrawSpriteCentered(bombTexture, b->x, b->y, 50.0f, 53.0f,
+                                   b->y * 0.32f, 0, WHITE);
+                continue;
+            }
             DrawCircleV((Vector2){b->x, b->y}, bomb_r, BLACK);
             DrawCircleV((Vector2){b->x - 4, b->y - 4}, 4, DARKGRAY);
             DrawLineEx((Vector2){b->x, b->y - bomb_r}, (Vector2){b->x + 5, b->y - bomb_r - 8}, 3, BROWN);
@@ -1776,13 +1994,55 @@ int main(void)
     int musicPaused = 0;
     static float dustTimer = 0.0f;
 
-    InitWindow(width, height, "bouncing classic game");
+    InitWindow(width, height, "Stonebound Science - Wilderness Expedition");
+    menuBackground = LoadTexture("assets/stone-age-science/menu-background.png");
+    gameplayBackground = LoadTexture("assets/stone-age-science/gameplay-background.png");
+    playerToken = LoadTexture("assets/stone-age-science/player-orb.png");
+    platformBlockTexture = LoadTexture("assets/stone-age-science/platform-block.png");
+    platformTileTexture = LoadTexture("assets/stone-age-science/platform-tile.png");
+    scienceTokenTexture = LoadTexture("assets/stone-age-science/science-token.png");
+    scienceCrystalTexture = LoadTexture("assets/stone-age-science/science-crystal.png");
+    powerTextures[POWER_SHIELD] = LoadTexture("assets/stone-age-science/power-shield.png");
+    powerTextures[POWER_MAGNET] = LoadTexture("assets/stone-age-science/power-magnet.png");
+    powerTextures[POWER_SPEED] = LoadTexture("assets/stone-age-science/power-speed.png");
+    checkpointTexture = LoadTexture("assets/stone-age-science/checkpoint-totem.png");
+    bombTexture = LoadTexture("assets/stone-age-science/clay-bomb.png");
+    bombLauncherTexture = LoadTexture("assets/stone-age-science/bomb-launcher.png");
+    groundEnemyTexture = LoadTexture("assets/stone-age-science/enemy-ground.png");
+    flyingEnemyTexture = LoadTexture("assets/stone-age-science/enemy-flying.png");
+    hazardTextures[0] = LoadTexture("assets/stone-age-science/hazard-stone.png");
+    hazardTextures[1] = LoadTexture("assets/stone-age-science/hazard-crystal.png");
+    hazardTextures[2] = LoadTexture("assets/stone-age-science/hazard-steam.png");
+
+    Texture2D *artTextures[] = {
+        &menuBackground, &gameplayBackground, &playerToken,
+        &platformBlockTexture, &platformTileTexture,
+        &scienceTokenTexture, &scienceCrystalTexture,
+        &powerTextures[0], &powerTextures[1], &powerTextures[2],
+        &checkpointTexture, &bombTexture, &bombLauncherTexture,
+        &groundEnemyTexture, &flyingEnemyTexture,
+        &hazardTextures[0], &hazardTextures[1], &hazardTextures[2]};
+    const char *artNames[] = {
+        "menu background", "gameplay background", "player orb",
+        "platform block", "platform tile", "science token", "science crystal",
+        "shield power-up", "lodestone power-up", "steam power-up",
+        "checkpoint totem", "clay bomb", "bomb launcher",
+        "ground enemy", "flying enemy",
+        "stone hazard", "crystal hazard", "steam hazard"};
+    int artTextureCount = (int)(sizeof(artTextures) / sizeof(artTextures[0]));
+    for (int i = 0; i < artTextureCount; i++)
+    {
+        if (artTextures[i]->id != 0)
+            SetTextureFilter(*artTextures[i], TEXTURE_FILTER_BILINEAR);
+        else
+            TraceLog(LOG_WARNING, "Could not load generated %s", artNames[i]);
+    }
     InitAudioDevice();
 
     // >>>>>>> NOTUN: sob theke gurutwopurno check - audio device e ki ashole ready hoyeche? >>>>>>>
     // ei check ta fail korle, code e kono bhul nai - tomar system/environment e
     // kono audio driver/speaker/output e pawa jacche na (WSL, remote server, Docker,
-    // virtual machine e eta khub common - shegulote by default sound card thake na)
+    // virtual machine e eta k common - shegulote by default sound card thake na)
     if (!IsAudioDeviceReady())
     {
         TraceLog(LOG_ERROR, "AUDIO DEVICE READY HOYNI! Tomar system/environment e kono sound output pawa jacche na. WSL/remote server/VM hole eta e main karon - normal Windows/laptop e run korle ei error asha uchit na.");
@@ -1796,7 +2056,7 @@ int main(void)
     // <<<<<<<
 
     // >>>>>>> asol 6 ta sound + notun 4 ta sound (coin/diamond/bomb) sob load hocche >>>>>>>
-    bgMusic = LoadMusicStream("assert/anik.mp3");
+    bgMusic = LoadMusicStream(FileExists("assert/anik.mp3") ? "assert/anik.mp3" : "music.mp3/music.mp3");
     jumpSound = LoadSound("assert/anik2.mp3");
     spikeSound = LoadSound("assert/anik3.mp3");
     gameOverSound = LoadSound("assert/anik4.mp3");
@@ -1879,10 +2139,30 @@ int main(void)
         }
 
         // ---------- main menu: name input ----------
-        if (menuScreen)
+        if (menuScreen && menuPage == MENU_HOME)
         {
             UpdateNameInput();
         }
+
+        Rectangle menuPlayButton = GetMenuPlayButton((int)width, (int)height);
+        Rectangle menuHowButton = GetMenuHowButton();
+        Rectangle menuCreditsButton = GetMenuCreditsButton();
+        Rectangle menuBackButton = GetMenuBackButton();
+        Vector2 menuMouse = GetMousePosition();
+        int menuPlayClicked = menuScreen && menuPage == MENU_HOME && namelen > 0 &&
+                              PointInside(menuMouse, menuPlayButton) &&
+                              IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+        if (menuScreen && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+        {
+            if (menuPage == MENU_HOME && PointInside(menuMouse, menuHowButton))
+                menuPage = MENU_HOW_TO_PLAY;
+            else if (menuPage == MENU_HOME && PointInside(menuMouse, menuCreditsButton))
+                menuPage = MENU_CREDITS;
+            else if (menuPage != MENU_HOME && PointInside(menuMouse, menuBackButton))
+                menuPage = MENU_HOME;
+        }
+        if (menuScreen && menuPage != MENU_HOME && IsKeyPressed(KEY_BACKSPACE))
+            menuPage = MENU_HOME;
 
         // ---------- NOTUN: mute toggle (shudhu menu name-typing er baire, na hole 'n' likhle mute hoye jay) ----------
         if (!menuScreen && IsKeyPressed(KEY_N))
@@ -1895,7 +2175,7 @@ int main(void)
         int wantRestart = 0;
         int wantMenu = 0;
         int wantContinue = 0;
-        if (IsKeyPressed(KEY_ENTER))
+        if ((IsKeyPressed(KEY_ENTER) && (!menuScreen || menuPage == MENU_HOME)) || menuPlayClicked)
         {
             if (menuScreen)
             {
@@ -1960,6 +2240,9 @@ int main(void)
             comboCount = 0;
             comboTimer = 0;
             shakeTime = 0;
+            hazardThemeTimer = 0.0f;
+            hazardTheme = 0;
+            menuPage = MENU_HOME;
         }
         else if (wantContinue)
         {
@@ -1977,7 +2260,7 @@ int main(void)
             bouncesremaining = max_bounces;
             camera.target.x = ballposition.x;
             shieldTimer = 2.0f; // continue korar por halka grace period
-            PushNotification("CONTINUING FROM CHECKPOINT");
+            PushNotification("RESTORED AT SCIENCE BEACON");
         }
 
         // ---------- pause ----------
@@ -2010,6 +2293,14 @@ int main(void)
         // ---------- game update ----------
         if (gamestarted && !gamepaused && !gameover && !gamewon)
         {
+            hazardThemeTimer += dt;
+            int nextHazardTheme = ((int)(hazardThemeTimer / hazard_theme_duration)) % 3;
+            if (nextHazardTheme != hazardTheme)
+            {
+                static const char *hazardNames[] = {"STONE FANGS", "CRYSTAL CRAWLERS", "STEAM BEETLES"};
+                hazardTheme = nextHazardTheme;
+                PushNotification(TextFormat("HAZARDS EVOLVED: %s", hazardNames[hazardTheme]));
+            }
             // spike ar damage timer shudhu game cholar somoy update hobe (pause e freeze thakbe)
             updatespikes(dt);
             updateenemies(dt);
@@ -2070,7 +2361,22 @@ int main(void)
                 }
             }
 
-            float speedMultiplier = (speedTimer > 0) ? 1.6f : 1.0f;
+            // Distance er sathe ball aste aste faster hobe.
+            // Start = 1.0x, finish er dike = maximum 1.5x.
+            float progress = maxdistance / (float)win_x;
+            if (progress < 0.0f)
+                progress = 0.0f;
+            if (progress > 1.0f)
+                progress = 1.0f;
+
+            float distanceSpeedMultiplier = 1.0f + 0.5f * progress;
+
+            // Speed power-up thakleo final speed 1.5x er beshi jabe na.
+            float speedMultiplier = distanceSpeedMultiplier;
+            if (speedTimer > 0)
+                speedMultiplier *= 1.6f;
+            if (speedMultiplier > 1.5f)
+                speedMultiplier = 1.5f;
 
             // gravity
             vertialvelocity += gravity * dt;
@@ -2181,10 +2487,27 @@ int main(void)
         // background (screen space e - jate camera move korleo gradient thake)
         Color skytop, skybottom;
         Back_Ground_Color(maxdistance, &skytop, &skybottom);
-        ClearBackground(skytop);
-        DrawRectangleGradientV(0, 0, width, height, skytop, skybottom);
-        DrawParallaxBackground(camera.target.x, width, height);
+        ClearBackground(ARENA_INK);
+        if (menuScreen)
+        {
+            if (menuBackground.id != 0)
+                DrawTextureCover(menuBackground, (Rectangle){0, 0, width, height}, WHITE);
+            else
+                DrawRectangleGradientV(0, 0, width, height, ARENA_INK, ARENA_PINK_DARK);
+            DrawRectangleGradientV(0, 0, width, height, Fade(ARENA_INK, 0.18f), Fade(ARENA_INK, 0.58f));
+        }
+        else
+        {
+            if (gameplayBackground.id != 0)
+                DrawTextureCover(gameplayBackground, (Rectangle){0, 0, width, height}, WHITE);
+            else
+                DrawRectangleGradientV(0, 0, width, height, skytop, skybottom);
+            DrawRectangle(0, 0, (int)width, (int)height, Fade(skytop, 0.10f));
+            DrawParallaxBackground(camera.target.x, width, height);
+        }
 
+        if (!menuScreen)
+        {
         BeginMode2D(camera_rounded);
         drawcheckpoints();
         drawcoins();
@@ -2196,15 +2519,13 @@ int main(void)
         {
             float gx = brickx + brickwidth * j;
             float gy = bricky;
-            DrawRectangle(gx, gy, brickwidth, brickheight, RED);
-            DrawRectangleLines(gx, gy, brickwidth, brickheight, MAROON);
+            DrawArenaBlock(gx, gy, brickwidth, brickheight);
         }
         // ceiling
         for (int j = 0; j < 400; j++)
         {
             float cx = brickwidth * j;
-            DrawRectangle(cx, 0, brickwidth, brickheight, RED);
-            DrawRectangleLines(cx, 0, brickwidth, brickheight, MAROON);
+            DrawArenaBlock(cx, 0, brickwidth, brickheight);
         }
         // platforms
         for (int p = 0; p < platforms_count; p++)
@@ -2215,8 +2536,7 @@ int main(void)
                 {
                     float dx = platforms[p].x + j * platformbrick_width;
                     float dy = platforms[p].y + i * platformbrick_height;
-                    DrawRectangle(dx, dy, platformbrick_width, platformbrick_height, RED);
-                    DrawRectangleLines(dx, dy, platformbrick_width, platformbrick_height, MAROON);
+                    DrawArenaBlock(dx, dy, platformbrick_width, platformbrick_height);
                 }
             }
         }
@@ -2237,75 +2557,247 @@ int main(void)
         {
             DrawCircleLines((int)ballposition.x, (int)ballposition.y, magnet_radius, Fade(RED, 0.25f));
         }
-        // ball
-        DrawCircle(ballposition.x, ballposition.y, radius, BLUE);
+        // generated contestant token (physics still uses the original circular hitbox)
+        DrawEllipse((int)ballposition.x, (int)(ballposition.y + radius * 0.82f), radius * 0.82f, radius * 0.28f, Fade(ARENA_INK, 0.28f));
+        if (playerToken.id != 0)
+        {
+            float spriteSize = radius * 3.15f;
+            DrawTexturePro(playerToken,
+                           (Rectangle){0, 0, (float)playerToken.width, (float)playerToken.height},
+                           (Rectangle){ballposition.x, ballposition.y, spriteSize, spriteSize},
+                           (Vector2){spriteSize * 0.5f, spriteSize * 0.5f}, ballrotation, WHITE);
+        }
+        else
+        {
+            DrawCircle((int)ballposition.x, (int)ballposition.y, radius, (Color){55, 68, 58, 255});
+        }
         // NOTUN: particle gulo ball er upore ashe
         DrawParticles();
         EndMode2D();
+        }
 
         // ---------- main menu ----------
         if (!gamestarted && !gameover && !gamepaused && !gamewon)
         {
-            DrawRectangle(0, 0, width, height, BLACK);
-            DrawTextCentered("bouncing classic", 55, 55, RED);
+            DrawCircleLines(107, 79, 24, SCIENCE_COPPER);
+            DrawCircle(107, 79, 7, ARENA_PINK);
+            DrawLineEx((Vector2){79, 79}, (Vector2){135, 79}, 3.0f, SCIENCE_COPPER);
+            DrawLineEx((Vector2){107, 51}, (Vector2){107, 107}, 3.0f, SCIENCE_COPPER);
+            DrawCircle(158, 79, 11, ARENA_MINT);
+            DrawText("STONEBOUND SCIENCE", 82, 108, 54, ARENA_CREAM);
+            DrawText("REBUILD THE WORLD // ONE EXPERIMENT AT A TIME", 86, 166, 19, Fade(ARENA_CREAM, 0.76f));
 
-            // NOTUN: top 5 leaderboard main menu te
-            DrawTextCentered("TOP 5 SCORES", 128, 22, GOLD);
-            for (int i = 0; i < leaderboard_size; i++)
+            if (menuPage == MENU_HOME)
             {
-                DrawTextCentered(TextFormat("%d. %-10s %6d", i + 1, leaderboard[i].name, leaderboard[i].score), 156 + i * 20, 18, (i == 0) ? GOLD : LIGHTGRAY);
+                Rectangle intakePanel = {70, 205, 566, 380};
+                DrawGlassPanel(intakePanel, ARENA_PINK);
+                DrawText("EXPLORER REGISTRATION", 96, 232, 24, ARENA_CREAM);
+                DrawText("NAME YOUR SCIENTIST", 96, 282, 17, Fade(ARENA_CREAM, 0.62f));
+
+                Rectangle nameBox = {96, 310, 500, 58};
+                DrawRectangleRounded(nameBox, 0.08f, 8, Fade(BLACK, 0.64f));
+                DrawRectangleRoundedLinesEx(nameBox, 0.08f, 8, 2.0f,
+                                            namelen > 0 ? ARENA_MINT : Fade(ARENA_CREAM, 0.45f));
+                const char *cursor = (((int)(GetTime() * 2)) % 2 == 0) ? "_" : "";
+                DrawText(TextFormat("%s%s", playername, cursor), 115, 325, 28, ARENA_CREAM);
+
+                Rectangle playButton = GetMenuPlayButton((int)width, (int)height);
+                int playHover = namelen > 0 && PointInside(GetMousePosition(), playButton);
+                Color buttonColor = namelen > 0 ? (playHover ? (Color){49, 213, 210, 255} : ARENA_PINK)
+                                                 : Fade(GRAY, 0.72f);
+                DrawRectangleRounded(playButton, 0.12f, 8, buttonColor);
+                DrawTextInRectCentered(namelen > 0 ? "BEGIN EXPEDITION" : "SCIENTIST NAME REQUIRED",
+                                       playButton, 24, namelen > 0 ? ARENA_INK : Fade(WHITE, 0.60f));
+
+                int howHover = PointInside(GetMousePosition(), menuHowButton);
+                int creditsHover = PointInside(GetMousePosition(), menuCreditsButton);
+                DrawRectangleRounded(menuHowButton, 0.12f, 8,
+                                     howHover ? SCIENCE_COPPER : Fade(SCIENCE_COPPER, 0.82f));
+                DrawRectangleRounded(menuCreditsButton, 0.12f, 8,
+                                     creditsHover ? ARENA_MINT : Fade(ARENA_MINT, 0.82f));
+                DrawTextInRectCentered("HOW TO PLAY", menuHowButton, 20, ARENA_CREAM);
+                DrawTextInRectCentered("CREDITS", menuCreditsButton, 20, ARENA_INK);
+                DrawText("CLICK OR PRESS ENTER TO START", 190, 542, 16, Fade(ARENA_CREAM, 0.58f));
+
+                Rectangle scoresPanel = {1180, 205, 350, 294};
+                DrawGlassPanel(scoresPanel, ARENA_MINT);
+                DrawText("HALL OF INVENTORS", 1210, 233, 23, ARENA_CREAM);
+                DrawLineEx((Vector2){1210, 271}, (Vector2){1500, 271}, 1.0f, Fade(ARENA_MINT, 0.45f));
+                for (int i = 0; i < leaderboard_size; i++)
+                {
+                    Color row = (i == 0) ? GOLD : Fade(ARENA_CREAM, 0.82f);
+                    DrawText(TextFormat("%02d", i + 1), 1212, 292 + i * 36, 19, row);
+                    DrawText(leaderboard[i].name, 1260, 292 + i * 36, 19, row);
+                    const char *scoreText = TextFormat("%d", leaderboard[i].score);
+                    DrawText(scoreText, 1494 - MeasureText(scoreText, 19), 292 + i * 36, 19, row);
+                }
+
+                Rectangle controlsPanel = {380, 650, 840, 68};
+                DrawRectangleRounded(controlsPanel, 0.08f, 8, Fade(ARENA_INK, 0.82f));
+                DrawText("MOVE", 420, 674, 18, ARENA_PINK);
+                DrawText("LEFT / RIGHT", 480, 674, 18, ARENA_CREAM);
+                DrawText("JUMP", 665, 674, 18, ARENA_PINK);
+                DrawText("SPACE x2", 725, 674, 18, ARENA_CREAM);
+                DrawText("PAUSE", 870, 674, 18, ARENA_PINK);
+                DrawText("P", 941, 674, 18, ARENA_CREAM);
+                DrawText("SOUND", 1010, 674, 18, ARENA_PINK);
+                DrawText("N", 1082, 674, 18, ARENA_CREAM);
             }
-
-            DrawTextCentered("enter your name:", 272, 22, RAYWHITE);
-
-            // name input box
-            int boxw = 420;
-            int boxx = ((int)width - boxw) / 2;
-            DrawRectangle(boxx, 302, boxw, 46, DARKGRAY);
-            DrawRectangleLines(boxx, 302, boxw, 46, RAYWHITE);
-            const char *cursor = (((int)(GetTime() * 2)) % 2 == 0) ? "_" : "";
-            DrawText(TextFormat("%s%s", playername, cursor), boxx + 12, 313, 26, RAYWHITE);
-
-            if (namelen > 0)
-                DrawTextCentered("press enter to start", 362, 24, GREEN);
             else
-                DrawTextCentered("type your name to begin", 362, 24, GRAY);
+            {
+                Rectangle infoPanel = {350, 190, 900, 400};
+                DrawGlassPanel(infoPanel, menuPage == MENU_HOW_TO_PLAY ? ARENA_PINK : SCIENCE_COPPER);
+                if (menuPage == MENU_HOW_TO_PLAY)
+                {
+                    DrawText("HOW TO PLAY", 390, 222, 36, ARENA_CREAM);
+                    DrawText("LEFT / RIGHT", 400, 286, 20, ARENA_PINK);
+                    DrawText("Move through the reclaimed world", 610, 286, 20, ARENA_CREAM);
+                    DrawText("SPACE x2", 400, 330, 20, ARENA_PINK);
+                    DrawText("Jump and double-jump", 610, 330, 20, ARENA_CREAM);
+                    DrawText("P / N", 400, 374, 20, ARENA_PINK);
+                    DrawText("Pause / toggle sound", 610, 374, 20, ARENA_CREAM);
+                    DrawText("Collect bronze science tokens and rare cyan crystals.", 400, 430, 20, Fade(ARENA_CREAM, 0.88f));
+                    DrawText("Use the stone shield, lodestone, and steam turbine power-ups.", 400, 466, 20, Fade(ARENA_CREAM, 0.88f));
+                    DrawText("Restore beacons. Avoid beasts, bombs, and moving hazards.", 400, 502, 20, Fade(ARENA_CREAM, 0.88f));
+                    DrawText("TRY TO AVOID THE MOVING THINGS    .", 400, 538, 20, ARENA_MINT);
+                }
+                else
+                {
+                    DrawText("CREDITS", 390, 222, 36, ARENA_CREAM);
+                    DrawText("DESIGN & PROGRAMMING", 400, 294, 20, SCIENCE_COPPER);
+                    DrawText("Original raylib game project", 720, 294, 20, ARENA_CREAM);
+                    DrawText("VISUAL DIRECTION", 400, 344, 20, SCIENCE_COPPER);
+                    DrawText("Stone-age science anime adventure", 720, 344, 20, ARENA_CREAM);
+                    DrawText("ART ASSETS", 400, 394, 20, SCIENCE_COPPER);
+                    DrawText("FROM DR STONE", 720, 394, 20, ARENA_CREAM);
+                    DrawText("ENGINE", 400, 444, 20, SCIENCE_COPPER);
+                    DrawText("raylib", 720, 444, 20, ARENA_CREAM);
+                    DrawText("SPECIAL THANKS", 400, 494, 20, SCIENCE_COPPER);
+                    DrawText("HABIB.2505105 AND SAKIB 2505104", 720, 494, 20, ARENA_CREAM);
+                }
 
-            DrawTextCentered("left / right = move", 420, 20, LIGHTGRAY);
-            DrawTextCentered("space = jump (double jump)", 445, 20, LIGHTGRAY);
-            DrawTextCentered("p = pause    n = mute/unmute", 470, 20, LIGHTGRAY);
-            DrawTextCentered("blue = shield   red = magnet   yellow = speed boost", 495, 18, LIGHTGRAY);
+                int backHover = PointInside(GetMousePosition(), menuBackButton);
+                DrawRectangleRounded(menuBackButton, 0.12f, 8,
+                                     backHover ? (Color){49, 213, 210, 255} : ARENA_PINK);
+                DrawTextInRectCentered("BACK TO MAIN MENU", menuBackButton, 20, ARENA_INK);
+            }
         }
         // ---------- pause menu ----------
         if (gamepaused && !gameover && !gamewon)
         {
-            DrawRectangle(0, 0, width, height, Fade(RAYWHITE, 0.90f));
-            DrawTextCentered("game paused", height / 2 - 100, 45, BLACK);
-            DrawTextCentered("press p to resume", height / 2 - 20, 25, DARKGRAY);
+            DrawRectangle(0, 0, width, height, Fade(ARENA_INK, 0.82f));
+            DrawGlassPanel((Rectangle){width / 2 - 250, height / 2 - 120, 500, 240}, ARENA_PINK);
+            DrawTextCentered("EXPERIMENT PAUSED", height / 2 - 76, 42, ARENA_CREAM);
+            DrawTextCentered("P  RESUME EXPEDITION", height / 2 + 12, 23, ARENA_MINT);
+            DrawTextCentered("N  TOGGLE SOUND", height / 2 + 49, 18, Fade(ARENA_CREAM, 0.64f));
         }
         // ---------- game over screen ----------
         if (gameover)
         {
-            DrawEndScreen("game over", RED, width, height);
+            DrawEndScreen("PETRIFIED", SCIENCE_COPPER, width, height);
         }
         // ---------- win screen ----------
         if (gamewon)
         {
-            DrawEndScreen("YOU WIN THE GAME", GREEN, width, height);
+            DrawEndScreen("KINGDOM RESTORED", ARENA_MINT, width, height);
         }
         // ---------- HUD ----------
-        if (gamestarted || gamepaused || gameover || gamewon)
-        {
-            // health bar
-            DrawRectangle(20, 20, 300, 30, DARKGRAY);
-            DrawRectangle(20, 20, (int)(300 * (health / maxhealth)), 30, GREEN);
-            DrawRectangleLines(20, 20, 300, 30, BLACK);
-            DrawText(TextFormat("hp: %.0f / %.0f", health, maxhealth), 35, 24, 22, BLACK);
+       if (gamestarted || gamepaused)
+{
+    int hudX = (int)width - 390;
+    int hudY = 18;
 
-            DrawText(TextFormat("score: %d", gamescore), 20, 58, 30, BLACK);
-            DrawText(TextFormat("player: %s", playername), 20, 95, 22, BLACK);
-            DrawText(TextFormat("best: %d (%s)", highscore, highname), 20, 120, 22, BLACK);
-            DrawText(TextFormat("x: %.0f", ballposition.x), 20, 145, 22, BLACK);
+    Rectangle hudPanel = {hudX, hudY, 370, 156};
+
+    DrawRectangleRounded(
+        hudPanel,
+        0.06f,
+        8,
+        Fade(ARENA_INK, 0.86f)
+    );
+
+    DrawRectangleRoundedLinesEx(
+        hudPanel,
+        0.06f,
+        8,
+        1.5f,
+        Fade(ARENA_MINT, 0.52f)
+    );
+
+    // Player name
+    DrawText(
+        TextFormat("EXPLORER  %s", playername),
+        hudX + 18,
+        hudY + 16,
+        18,
+        ARENA_CREAM
+    );
+
+    // Score
+    DrawText(
+        TextFormat("SCORE  %06d", gamescore),
+        hudX + 18,
+        hudY + 73,
+        26,
+        WHITE
+    );
+
+    // Record
+    DrawText(
+        TextFormat("RECORD  %06d", highscore),
+        hudX + 18,
+        hudY + 108,
+        17,
+        Fade(ARENA_CREAM, 0.70f)
+    );
+
+    // Health bar background
+    DrawRectangle(
+        hudX + 18,
+        hudY + 47,
+        330,
+        13,
+        Fade(BLACK, 0.60f)
+    );
+
+    // Health bar
+    DrawRectangle(
+        hudX + 18,
+        hudY + 47,
+        (int)(330 * (health / maxhealth)),
+        13,
+        health > 35
+            ? (Color){83, 232, 175, 255}
+            : ARENA_PINK
+    );
+
+    // Life
+    DrawText(
+        TextFormat("LIFE %.0f", health),
+        hudX + 264,
+        hudY + 25,
+        16,
+        Fade(ARENA_CREAM, 0.76f)
+    );
+
+    // Progress bar
+    float progress = fminf(ballposition.x / win_x, 1.0f);
+
+    DrawRectangle(
+        hudX,
+        hudY + 163,
+        370,
+        8,
+        Fade(ARENA_INK, 0.75f)
+    );
+
+    DrawRectangle(
+        hudX,
+        hudY + 163,
+        (int)(370 * progress),
+        8,
+        ARENA_PINK
+    );
 
             // NOTUN: combo counter
             if (comboCount > 0)
@@ -2313,7 +2805,7 @@ int main(void)
                 int mult = 1 + comboCount / 5;
                 if (mult > combo_max_mult)
                     mult = combo_max_mult;
-                DrawText(TextFormat("combo x%d", mult), 20, 170, 22, ORANGE);
+                DrawText(TextFormat("COMBO x%d", mult), 405, 24, 22, GOLD);
             }
 
             // NOTUN: active powerup timer bar (upper right)
@@ -2321,23 +2813,29 @@ int main(void)
             int px = (int)width - 230;
             if (shieldTimer > 0)
             {
-                DrawRectangle(px, py, 210, 26, Fade(SKYBLUE, 0.85f));
-                DrawText(TextFormat("SHIELD %.1fs", shieldTimer), px + 8, py + 4, 18, DARKBLUE);
-                py += 30;
+                DrawRectangleRounded((Rectangle){px, py, 210, 30}, 0.10f, 6, Fade((Color){75, 180, 255, 255}, 0.86f));
+                DrawText(TextFormat("SHIELD   %.1fs", shieldTimer), px + 12, py + 6, 18, WHITE);
+                py += 36;
             }
             if (magnetTimer > 0)
             {
-                DrawRectangle(px, py, 210, 26, Fade(RED, 0.55f));
-                DrawText(TextFormat("MAGNET %.1fs", magnetTimer), px + 8, py + 4, 18, MAROON);
-                py += 30;
+                DrawRectangleRounded((Rectangle){px, py, 210, 30}, 0.10f, 6, Fade(ARENA_PINK, 0.86f));
+                DrawText(TextFormat("MAGNET   %.1fs", magnetTimer), px + 12, py + 6, 18, WHITE);
+                py += 36;
             }
             if (speedTimer > 0)
             {
-                DrawRectangle(px, py, 210, 26, Fade(YELLOW, 0.85f));
-                DrawText(TextFormat("SPEED %.1fs", speedTimer), px + 8, py + 4, 18, ORANGE);
-                py += 30;
+                DrawRectangleRounded((Rectangle){px, py, 210, 30}, 0.10f, 6, Fade(GOLD, 0.88f));
+                DrawText(TextFormat("STEAM    %.1fs", speedTimer), px + 12, py + 6, 18, ARENA_INK);
+                py += 36;
             }
-            DrawText(muted ? "sound: off (n)" : "sound: on (n)", (int)width - 190, (int)height - 30, 18, DARKGRAY);
+            static const char *hazardHudNames[] = {"STONE", "CRYSTAL", "STEAM"};
+            float hazardTimeRemaining = hazard_theme_duration - fmodf(hazardThemeTimer, hazard_theme_duration);
+            DrawRectangleRounded((Rectangle){(int)width - 292, 126, 272, 38}, 0.10f, 6,
+                                 Fade(ARENA_INK, 0.82f));
+            DrawText(TextFormat("HAZARD  %s  %.0fs", hazardHudNames[hazardTheme], hazardTimeRemaining),
+                     (int)width - 276, 136, 17, ARENA_MINT);
+            DrawText(muted ? "N  SOUND OFF" : "N  SOUND ON", (int)width - 170, (int)height - 32, 18, ARENA_CREAM);
         }
         // NOTUN: notification popup gulo sobar upore
         DrawNotifications((int)width);
@@ -2354,6 +2852,11 @@ int main(void)
     UnloadSound(diamondSound);
     UnloadSound(bombDropSound);
     UnloadSound(bombHitSound);
+    for (int i = 0; i < artTextureCount; i++)
+    {
+        if (artTextures[i]->id != 0)
+            UnloadTexture(*artTextures[i]);
+    }
 
     CloseAudioDevice();
     CloseWindow();
